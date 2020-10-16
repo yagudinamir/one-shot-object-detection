@@ -19,6 +19,7 @@ class FCOS(nn.Module):
         super().__init__()
         if config is None:
             config=DefaultConfig
+            config.use_GN_head=False
         self.backbone=resnet50(pretrained=config.pretrained,if_include_top=False)
         self.fpn=FPN(config.fpn_out_channels,use_p5=config.use_p5)
         self.head=ClsCntRegHead(1, 2,
@@ -65,7 +66,7 @@ class FCOS(nn.Module):
             all_P.append(self.cs(cq, pooled_features).unsqueeze(1))
 
         cls_logits,cnt_logits,reg_preds=self.head(all_P)
-        return [cls_logits,cnt_logits,reg_preds]
+        return [cls_logits,cnt_logits,reg_preds], [all_P_query, all_P_support]
 
 class DetectHead(nn.Module):
     def __init__(self,score_threshold,nms_iou_threshold,max_detection_boxes_num,strides,config=None):
@@ -248,16 +249,16 @@ class FCOSDetector(nn.Module):
     def forward(self,inputs):
         '''
         inputs 
-        [training] list  batch_imgs,batch_boxes,batch_classes
+        [training] list  batch_queries, batch_support, batch_boxes, batch_classes
         [inference] img
         '''
 
         if self.mode=="training":
             batch_queries, batch_support,batch_boxes,batch_classes=inputs
-            out=self.fcos_body(batch_queries, batch_support)
+            out, features=self.fcos_body(batch_queries, batch_support)
             targets=self.target_layer([out,batch_boxes,batch_classes])
             losses=self.loss_layer([out,targets])
-            return losses
+            return losses, out, targets, features
         elif self.mode=="inference":
             # raise NotImplementedError("no implement inference model")
             '''
