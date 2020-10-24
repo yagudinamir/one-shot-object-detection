@@ -36,7 +36,7 @@ class CocoDataset(torch.utils.data.Dataset):
 
         res = {
             'images': X,
-            'bbox': np.array(y['bbox']),
+            'bboxes': np.array([x['bbox'] for x in y_list if x['category_id'] == cat_id]),
             'supports': support_image,
         }
         return res
@@ -57,19 +57,22 @@ def my_collate(batch):
         item['supports'] = resize(item['supports'], (supp_h_mean, supp_w_mean))
         images.append(ToTensor()(item['images']))
         supports.append(ToTensor()(item['supports']))
-        bbox_points.append(item['bbox'])
+        bbox_points.append(torch.tensor(item['bboxes']))
 
     res['images'] = torch.stack(images)
     res['supports'] = torch.stack(supports)
-    res['bbox'] = torch.tensor(bbox_points)
+    res['bboxes'] = bbox_points
     return res
+
+def get_dataloader(img_path, ann_path, sup_path, batch_size, transform=None):
+    ds = CocoDataset(img_path, ann_path, sup_path, transform=transform)
+    ds_loader = torch.utils.data.DataLoader(ds, batch_size=batch_size, collate_fn=my_collate, shuffle=True)
+    return ds_loader
     
 
 if __name__ == '__main__':
-    ds = CocoDataset('val2017', 'annotations/instances_val2017.json', 'val2017_supp')
-    ds_loader = torch.utils.data.DataLoader(ds, batch_size=32, collate_fn=my_collate, shuffle=True)
+    ds_loader = get_dataloader('val2017', 'annotations/instances_val2017.json', 'val2017_supp', batch_size=32)
     for idx, item in enumerate(ds_loader):
-        print(item.keys())
-        print(item['images'].shape, item['supports'].shape, item['bbox'].shape)
+        print(item['images'].shape, item['supports'].shape, len(item['bboxes']))
         if idx == 3:
             break
